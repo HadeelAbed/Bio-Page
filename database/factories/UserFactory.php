@@ -26,6 +26,10 @@ class UserFactory extends Factory
     {
         return [
             'name' => fake()->name(),
+            // Public bio handle: lowercase letters/digits, so it always
+            // satisfies the ^[a-zA-Z0-9_\-]+$ route constraint (Phase 4).
+            // The model mutator lowercases it again as a safety net.
+            'username' => Str::slug(fake()->unique()->userName(), '_'),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
