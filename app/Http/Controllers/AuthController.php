@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 /**
@@ -92,6 +93,14 @@ class AuthController extends Controller
                 // router could not serve back (defence in depth, one regex
                 // duplicated in exactly two documented places).
                 'regex:/^[a-zA-Z0-9_\-]+$/',
+                // RESERVED SLUG GUARD: these usernames are router-level system
+                // paths (/dashboard, /login, /register, /logout). They pass
+                // the charset regex but must never become accounts, otherwise
+                // GET /login would be ambiguous between the auth page and a
+                // bio page for a user named "login". The lookahead in the
+                // Phase 4 route constraint blocks them at the router; this
+                // Rule::notIn() blocks them at REGISTRATION, closing the loop.
+                Rule::notIn(['dashboard', 'login', 'register', 'logout']),
                 // Case-insensitive uniqueness is ALSO guaranteed by the DB
                 // index (utf8mb4_unicode_ci); this check just short-circuits
                 // with a friendly message before we hit the database.

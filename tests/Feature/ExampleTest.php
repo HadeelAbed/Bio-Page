@@ -2,18 +2,19 @@
 
 namespace Tests\Feature;
 
-// use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ExampleTest extends TestCase
 {
     /**
-     * A basic test example.
+     * The landing route redirects to the login page (see routes/web.php:
+     * `Route::get('/', ...)->name('home')`). This test pins that behaviour
+     * so a future marketing homepage does not silently swallow logins.
      */
-    public function test_the_application_returns_a_successful_response(): void
+    public function test_the_application_redirects_home_to_login(): void
     {
         $response = $this->get('/');
 
-        $response->assertStatus(200);
+        $response->assertRedirect('/login');
     }
 }

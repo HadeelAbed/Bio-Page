@@ -23,9 +23,25 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
-        <env name="DB_URL" value=""/>
+        <!--
+          TEST DATABASE STRATEGY (documented, opt-out capable):
+          Preferred: a dedicated MySQL database (bio_page_testing) so the
+          test suite exercises THE SAME engine as local dev / production —
+          case-insensitive unique indexes, FK cascades, reserved-word
+          quoting of the `order` column. RefreshDatabase rebuilds it per test.
+          Fallback: set DB_CONNECTION=sqlite (e.g. in CI without MySQL) and
+          the suite transparently runs on in-memory SQLite instead.
+          DB_DATABASE may be overridden per-environment (.env.testing) or via
+          the environment; the default below is the local MySQL test database.
+        -->
+        <env name="DB_CONNECTION" value="mysql"/>
+        <env name="DB_HOST" value="127.0.0.1"/>
+        <env name="DB_PORT" value="3306"/>
+        <env name="DB_DATABASE" value="bio_page_testing"/>
+        <env name="DB_USERNAME" value="root"/>
+        <env name="DB_PASSWORD" value=""/>
+        <env name="DB_CHARSET" value="utf8mb4"/>
+        <env name="DB_COLLATION" value="utf8mb4_unicode_ci"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

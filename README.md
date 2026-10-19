@@ -6,12 +6,12 @@ cards and gradient-masking. Pure **Laravel Blade + Tailwind CDN + Alpine.js**
 
 ## Tech stack
 
-| Layer    | Choice                                   |
-|----------|------------------------------------------|
-| Backend  | Laravel 12 (MVC, Eloquent, session auth) |
-| Database | MySQL-ready migrations (SQLite for dev)  |
-| Frontend | Blade templates, Tailwind CDN, Alpine.js |
-| Storage  | `public` disk for header-image uploads   |
+| Layer    | Choice                                              |
+|----------|-----------------------------------------------------|
+| Backend  | Laravel 12 (MVC, Eloquent, session auth)            |
+| Database | **MySQL / MariaDB** (`bio_page` dev, `bio_page_testing` for tests) |
+| Frontend | Blade templates, Tailwind CDN, Alpine.js            |
+| Storage  | `public` disk for header-image uploads              |
 
 ## Quick start
 
@@ -23,15 +23,25 @@ composer install
 cp .env.example .env
 php artisan key:generate
 
-# 3. Database
-#    — local dev (zero setup): keep DB_CONNECTION=sqlite
-#    — production: switch to MySQL and create the database first
+# 3. Database — MySQL (local dev + production)
+#    The project runs on MySQL. With XAMPP's MariaDB running locally,
+#    only the values below are needed (root has no password by default):
 #        DB_CONNECTION=mysql
 #        DB_HOST=127.0.0.1
 #        DB_PORT=3306
-#        DB_DATABASE=bio_page
+#        DB_DATABASE=bio_page          # dev database
 #        DB_USERNAME=root
-#        DB_PASSWORD=
+#        DB_PASSWORD=                  # empty for local XAMPP
+#
+#    Create the two databases once (dev + isolated test database):
+#        mysql -u root -e "CREATE DATABASE IF NOT EXISTS bio_page CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+#        mysql -u root -e "CREATE DATABASE IF NOT EXISTS bio_page_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+#
+#    The automated suite runs against bio_page_testing on MySQL by default
+#    (see phpunit.xml). RefreshDatabase rebuilds it per test, so your dev
+#    database is never touched by tests.
+#    CI fallback without MySQL: DB_CONNECTION=sqlite DB_DATABASE=':memory:'
+#    (the single collation-specific test self-skips on SQLite).
 
 php artisan migrate --seed
 php artisan storage:link   # public URL access for header uploads
