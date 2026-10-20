@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
@@ -45,11 +46,11 @@ class AuthController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $credentials = $request->validate([
-            'email'    => ['required', 'email'],
+            'email' => ['required', 'email'],
             'password' => ['required', 'string'],
         ], [
             'email.required' => 'البريد الإلكتروني مطلوب.',
-            'email.email'    => 'صيغة البريد الإلكتروني غير صحيحة.',
+            'email.email' => 'صيغة البريد الإلكتروني غير صحيحة.',
             'password.required' => 'كلمة المرور مطلوبة.',
         ]);
 
@@ -84,8 +85,12 @@ class AuthController extends Controller
      */
     public function storeRegister(Request $request): RedirectResponse
     {
+        $request->merge([
+            'username' => Str::lower((string) $request->input('username')),
+        ]);
+
         $data = $request->validate([
-            'name'     => ['required', 'string', 'max:60'],
+            'name' => ['required', 'string', 'max:60'],
             'username' => [
                 'required', 'string', 'min:3', 'max:30',
                 // SAME charset contract as the Phase 4 route regex — mirroring
@@ -106,22 +111,22 @@ class AuthController extends Controller
                 // with a friendly message before we hit the database.
                 'unique:users,username',
             ],
-            'email'    => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::min(8)],
         ], [
-            'username.regex'  => 'اسم المستخدم يقبل فقط الحروف والأرقام والشرطة والشرط السفلي.',
+            'username.regex' => 'اسم المستخدم يقبل فقط الحروف والأرقام والشرطة والشرط السفلي.',
             'username.unique' => 'اسم المستخدم محجوز بالفعل، جربي اسمًا آخر.',
-            'username.min'    => 'اسم المستخدم 3 أحرف على الأقل.',
-            'email.unique'    => 'هذا البريد مسجل مسبقًا.',
+            'username.min' => 'اسم المستخدم 3 أحرف على الأقل.',
+            'email.unique' => 'هذا البريد مسجل مسبقًا.',
             'password.confirmed' => 'تأكيد كلمة المرور غير مطابق.',
         ]);
 
         // create() passes through the User model mutator, which lowercases the
         // username a second time (normalisation lives in the MODEL, not here).
         $user = User::create([
-            'name'     => $data['name'],
+            'name' => $data['name'],
             'username' => $data['username'],
-            'email'    => $data['email'],
+            'email' => $data['email'],
             'password' => Hash::make($data['password']),
         ]);
 
@@ -145,6 +150,6 @@ class AuthController extends Controller
         $request->session()->invalidate();     // destroy ALL session data
         $request->session()->regenerateToken(); // rotate CSRF token
 
-        return redirect()->route('login');
+        return redirect()->route('home');
     }
 }

@@ -27,6 +27,7 @@ class Profile extends Model
         'bg_color_1',
         'bg_color_2',
         'text_color',
+        'page_background_color',
     ];
 
     /**
@@ -44,6 +45,7 @@ class Profile extends Model
         'bg_color_1' => '#b88c8f',
         'bg_color_2' => '#ba8b8f',
         'text_color' => '#1a1a1a',
+        'page_background_color' => '#f4efed',
     ];
 
     /* =======================================================================
@@ -83,18 +85,17 @@ class Profile extends Model
      *
      * Fallback strategy (in order):
      *  1. Stored path exists on the public disk  → storage URL
-     *  2. Stored path missing (file deleted)     → stock cover image
-     *  3. No path at all (new profile)           → stock cover image
-     * The fallback prevents the classic "broken image icon" when an upload
-     * was removed from disk manually.
+     *  2. Stored path missing (file deleted)     → null
+     *  3. No path at all (new profile)           → null
+     * Returning null lets both the bio page and the editor treat the cover as
+     * genuinely OPTIONAL: the gradient background simply renders on its own
+     * instead of forcing a stock photo the user never chose.
      */
     protected function headerImageUrl(): Attribute
     {
-        return Attribute::get(function (?string $value, array $attributes): string {
+        return Attribute::get(function (?string $value, array $attributes): ?string {
             // The REAL source column (see gotcha note above).
             $path = $attributes['header_image'] ?? null;
-
-            $fallback = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=800&auto=format&fit=crop';
 
             if ($path && Storage::disk('public')->exists($path)) {
                 // Storage::url() respects the disk's base URL configuration,
@@ -102,7 +103,7 @@ class Profile extends Model
                 return Storage::disk('public')->url($path);
             }
 
-            return $fallback;
+            return null;
         });
     }
 }

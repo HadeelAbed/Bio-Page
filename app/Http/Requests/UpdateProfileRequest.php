@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -39,7 +40,7 @@ class UpdateProfileRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
@@ -48,7 +49,7 @@ class UpdateProfileRequest extends FormRequest
             // Nullable (not required): clearing a field must be allowed, otherwise
             // users could never empty their bio after filling it once.
             'display_name' => ['nullable', 'string', 'max:60'],
-            'bio'          => ['nullable', 'string', 'max:160'],
+            'bio' => ['nullable', 'string', 'max:160'],
 
             // ---- Header image ----------------------------------------------------
             // `image` + `mimes` double-checks the REAL file signature (not just the
@@ -58,6 +59,11 @@ class UpdateProfileRequest extends FormRequest
             // CSS (object-cover + object-top) handles cropping responsively.
             'header_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
 
+            // Explicit "remove the existing cover" flag. The cover is optional,
+            // so clearing it must be possible without uploading a replacement.
+            // Ignored when a new file is supplied (replace wins over remove).
+            'remove_header_image' => ['sometimes', 'boolean'],
+
             // ---- Colours ---------------------------------------------------------
             // Strict 6-digit hex ONLY. The value is interpolated into an inline
             // style="background: linear-gradient(..., VALUE)" in bio.blade.php,
@@ -66,19 +72,20 @@ class UpdateProfileRequest extends FormRequest
             'bg_color_1' => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'bg_color_2' => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'text_color' => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'page_background_color' => ['sometimes', 'required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
 
             // ---- Dynamic links array ---------------------------------------------
             // Alpine submits links as links[0][title], links[1][url], …
-            'links'      => ['array', 'max:25'],               // sane upper bound
+            'links' => ['array', 'max:25'],               // sane upper bound
             'links.*.id' => ['nullable', 'integer'],           // existence + OWNERSHIP
-                                                               // verified in the
-                                                               // controller (a forged
-                                                               // id of another user
-                                                               // must be ignored, not
-                                                               // trusted)
-            'links.*.title'    => ['required', 'string', 'max:80'],
-            'links.*.url'      => ['required', 'string', 'max:2048', 'url'],
-            'links.*.is_active'=> ['sometimes', 'boolean'],    // 0/1 from the hidden input
+            // verified in the
+            // controller (a forged
+            // id of another user
+            // must be ignored, not
+            // trusted)
+            'links.*.title' => ['required', 'string', 'max:80'],
+            'links.*.url' => ['required', 'string', 'max:2048', 'url:http,https'],
+            'links.*.is_active' => ['sometimes', 'boolean'],    // 0/1 from the hidden input
         ];
     }
 
@@ -93,12 +100,13 @@ class UpdateProfileRequest extends FormRequest
             'bg_color_1.regex' => 'لون التدرج العلوي غير صالح (الصيغة المطلوبة: #AABBCC).',
             'bg_color_2.regex' => 'لون التدرج السفلي غير صالح (الصيغة المطلوبة: #AABBCC).',
             'text_color.regex' => 'لون النص غير صالح (الصيغة المطلوبة: #AABBCC).',
+            'page_background_color.regex' => 'لون خلفية الصفحة غير صالح (الصيغة المطلوبة: #AABBCC).',
             'header_image.image' => 'الملف المرفوع يجب أن يكون صورة.',
             'header_image.mimes' => 'صيغة الصورة المسموحة: JPG, PNG أو WEBP فقط.',
-            'header_image.max'   => 'حجم الصورة لا يتجاوز 2 ميغابايت.',
+            'header_image.max' => 'حجم الصورة لا يتجاوز 2 ميغابايت.',
             'links.*.title.required' => 'اسم الزر مطلوب لكل رابط.',
-            'links.*.url.required'   => 'الرابط مطلوب لكل رابط.',
-            'links.*.url.url'        => 'يجب أن يبدأ الرابط بـ http:// أو https://',
+            'links.*.url.required' => 'الرابط مطلوب لكل رابط.',
+            'links.*.url.url' => 'يجب أن يبدأ الرابط بـ http:// أو https://',
         ];
     }
 }

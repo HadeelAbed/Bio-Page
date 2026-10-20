@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateProfileRequest;
+use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 /**
  * ---------------------------------------------------------------------------
@@ -38,7 +41,7 @@ class DashboardController extends Controller
      */
     public function edit(): View
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = request()->user()->load([
             'profile',
             'links' => fn ($query) => $query->orderBy('order'),
@@ -50,23 +53,22 @@ class DashboardController extends Controller
             // through the relationship: $user->profile()->save($profile),
             // which injects user_id implicitly — the request never supplies it.
             'profile' => $user->profile ?? $user->profile()->make(),
-            'links'   => $user->links, // already sorted by `order`
+            'links' => $user->links, // already sorted by `order`
         ]);
     }
 
     /**
      * Persist profile changes, the optional header image, and the full link
-     * set in ONE atomic operation.
+     * set. Profile and link database writes are one atomic operation; file
+     * changes are coordinated around that transaction with compensating cleanup.
      *
-     * TRANSACTIONALITY: everything runs inside DB::transaction(). Without it,
-     * a failure while syncing links would leave the colours saved but the
-     * links half-updated — an inconsistent state the user cannot easily
-     * repair from the UI.
+     * TRANSACTIONALITY: without DB::transaction(), a failure while syncing
+     * links would leave the colours saved but the links half-updated — an
+     * inconsistent state the user cannot easily repair from the UI.
      *
-     * IMAGE LIFECYCLE: store the new file FIRST, then delete the old one.
-     * If we deleted first and the upload failed, the profile would point at
-     * a ghost path. Storing first means the only failure mode is a briefly
-     * orphaned old file, which disk cleanup can reclaim.
+     * IMAGE LIFECYCLE: store the new file first, commit its path with the
+     * database changes, then delete the old file. On rollback, remove the new
+     * upload and keep the old file referenced by the unchanged profile.
      */
     public function update(UpdateProfileRequest $request): RedirectResponse
     {
@@ -76,46 +78,66 @@ class DashboardController extends Controller
         // validated() only exposes keys declared in UpdateProfileRequest::rules()
         // — any smuggled user_id / is_admin / etc. key is stripped automatically.
         $data = $request->validated();
+        $newHeaderPath = null;
+        $oldHeaderPath = null;
 
-        DB::transaction(function () use ($user, $data, $request) {
-            /* ---------------------------- 1. PROFILE ------------------------- */
-            $profile = $user->profile ?? $user->profile()->make();
+        try {
+            DB::transaction(function () use ($user, $data, $request, &$newHeaderPath, &$oldHeaderPath) {
+                /* ---------------------------- 1. PROFILE ------------------------- */
+                $profile = $user->profile ?? $user->profile()->make();
+                $oldHeaderPath = $profile->header_image;
 
-            // ---- Header image (optional replace) -----------------------------
-            if ($request->hasFile('header_image')) {
-                // store() generates a UUID-based name → no filename collisions,
-                // no user-controlled paths, no original-name XSS surface.
-                $newPath = $request->file('header_image')->store('headers', 'public');
+                // ---- Header image (optional: replace, remove, or leave as-is) ----
+                if ($request->hasFile('header_image')) {
+                    // store() generates a UUID-based name → no filename collisions,
+                    // no user-controlled paths, no original-name XSS surface.
+                    $newPath = $request->file('header_image')->store('headers', 'public');
 
-                // store() returns false on disk failure — abort triggers rollback.
-                abort_if($newPath === false, 500, 'تعذر حفظ صورة الهيدر.');
+                    // store() returns false on disk failure — abort triggers rollback.
+                    abort_if($newPath === false, 500, 'تعذر حفظ صورة الهيدر.');
+                    $newHeaderPath = $newPath;
 
-                // Garbage-collect the PREVIOUS image (if any) so the disk
-                // never accumulates abandoned uploads.
-                if ($profile->header_image && Storage::disk('public')->exists($profile->header_image)) {
-                    Storage::disk('public')->delete($profile->header_image);
+                    $profile->header_image = $newPath; // relative path, see accessor
+                } elseif ($request->boolean('remove_header_image')) {
+                    // Cover is OPTIONAL: no replacement file + explicit removal flag
+                    // ⇒ clear the column; the old file is deleted after commit.
+                    $profile->header_image = null;
                 }
 
-                $profile->header_image = $newPath; // relative path, see accessor
+                $profile->fill(collect($data)->only([
+                    'display_name', 'bio', 'bg_color_1', 'bg_color_2', 'text_color',
+                    'page_background_color',
+                ])->all());
+
+                // SAVE THROUGH THE RELATIONSHIP ⇒ user_id injected internally.
+                $user->profile()->save($profile);
+
+                /* ----------------------------- 2. LINKS --------------------------- */
+                $this->syncLinks($user, $data['links'] ?? []);
+            });
+        } catch (Throwable $exception) {
+            if ($newHeaderPath !== null
+                && Storage::disk('public')->exists($newHeaderPath)
+                && ! Storage::disk('public')->delete($newHeaderPath)) {
+                Log::warning('Failed to clean up a profile image after a failed database update.', [
+                    'path' => $newHeaderPath,
+                ]);
             }
 
-            $profile->fill(collect($data)->only([
-                'display_name', 'bio', 'bg_color_1', 'bg_color_2', 'text_color',
-            ])->all());
+            throw $exception;
+        }
 
-            // SAVE THROUGH THE RELATIONSHIP ⇒ user_id injected internally.
-            $user->profile()->save($profile);
-
-            /* ----------------------------- 2. LINKS --------------------------- */
-            $this->syncLinks($user, $data['links'] ?? []);
-        });
+        if ($oldHeaderPath && $oldHeaderPath !== $newHeaderPath
+            && Storage::disk('public')->exists($oldHeaderPath)
+            && ! Storage::disk('public')->delete($oldHeaderPath)) {
+            throw new \RuntimeException('The profile was saved, but the previous image could not be removed.');
+        }
 
         // with() flashes status into the session for the redirected GET.
         return redirect()
             ->route('dashboard.edit')
             ->with('status', 'تم حفظ التغييرات ونشرها بنجاح ✨');
     }
-
 
     /**
      * Sync the submitted link array with the database (diff-based).
@@ -133,7 +155,7 @@ class DashboardController extends Controller
      * and falls through to the CREATE branch instead of overwriting the
      * victim's link. This is zero-trust applied to mass sync.
      */
-    private function syncLinks(\App\Models\User $user, array $submitted): void
+    private function syncLinks(User $user, array $submitted): void
     {
         $keepIds = collect($submitted)
             ->pluck('id')
@@ -149,9 +171,9 @@ class DashboardController extends Controller
         // (3)+(4) Upsert each row at its new positional index.
         foreach (array_values($submitted) as $index => $row) {
             $attributes = [
-                'title'     => $row['title'],
-                'url'       => $row['url'],
-                'order'     => $index,                // array order == display order
+                'title' => $row['title'],
+                'url' => $row['url'],
+                'order' => $index,                // array order == display order
                 'is_active' => (bool) ($row['is_active'] ?? true),
             ];
 

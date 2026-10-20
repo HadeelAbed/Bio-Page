@@ -34,7 +34,7 @@
         <div>
           <label for="username" class="block text-sm font-semibold text-gray-900 mb-1">اسم المستخدم (الرابط)</label>
           <input
-            id="username" type="text" name="username" value="{{ old('username') }}" required maxlength="30"
+            id="username" type="text" name="username" value="{{ old('username', request('username')) }}" required maxlength="30"
             dir="ltr" placeholder="hadeel"
             class="w-full text-left rounded-xl border border-white/50 bg-white/70 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300 @error('username') ring-2 ring-red-400 @enderror"
           />

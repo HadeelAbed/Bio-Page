@@ -74,7 +74,10 @@
   </head>
 
   {{-- The gradient itself is data-driven: bg_color_1 (top) ▸ bg_color_2 (bottom) --}}
-  <body class="min-h-screen flex items-center justify-center p-0 md:p-6 lg:p-10 selection:bg-rose-200">
+  <body
+    class="min-h-screen flex items-center justify-center p-0 md:p-6 lg:p-10 selection:bg-rose-200"
+    style="background-color: {{ $profile?->page_background_color ?? '#f4efed' }};"
+  >
     {{-- Ambient blur glow, desktop only (decorative; pointer-events:none so it
          never intercepts clicks) --}}
     <div class="fixed inset-0 overflow-hidden pointer-events-none hidden md:block">
@@ -83,7 +86,7 @@
     </div>
 
     {{-- Main card: full-bleed on mobile, floating rounded card on ≥md.
-         NOTE: the inline style below is the ONLY place DB colours reach the DOM --}}
+         Profile colors are validated as hex before reaching inline styles. --}}
     <main
       style="background: linear-gradient(to bottom, {{ $profile?->bg_color_1 ?? '#b88c8f' }}, {{ $profile?->bg_color_2 ?? '#ba8b8f' }}); color: {{ $profile?->text_color ?? '#1a1a1a' }};"
       class="w-full md:max-w-[440px] min-h-screen md:min-h-[820px] md:max-h-[90vh] overflow-y-auto relative flex flex-col items-center pb-12 md:rounded-[42px] md:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] md:border md:border-white/20"
@@ -128,20 +131,25 @@
         </button>
       </header>
 
-      {{-- Cover image. header_image_url accessor resolves the storage URL or
-           the stock fallback, so this <img> can never 404. --}}
-      <section class="w-full h-80 relative overflow-hidden flex-shrink-0">
-        <img
-          src="{{ $profile?->header_image_url ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=800&auto=format&fit=crop' }}"
-          alt="{{ $profile?->display_name ?? $user->name }}"
-          class="w-full h-full object-cover object-top header-mask"
-        />
-      </section>
+      {{-- Cover image — OPTIONAL. When the user has not uploaded one (or the
+           file was removed), the section is skipped entirely and the profile
+           gradient becomes the background on its own. --}}
+      @php($coverUrl = $profile?->header_image_url)
+      @if ($coverUrl)
+        <section class="w-full h-80 relative overflow-hidden flex-shrink-0">
+          <img
+            src="{{ $coverUrl }}"
+            alt="{{ $profile?->display_name ?? $user->name }}"
+            class="w-full h-full object-cover object-top header-mask"
+          />
+        </section>
+      @endif
 
-      {{-- Identity block — colour follows the DB-configured text_color --}}
+      {{-- Identity block — colour follows the DB-configured text_color.
+           Without a cover we add top padding to clear the floating action bar. --}}
       <section
         style="color: {{ $profile?->text_color ?? '#1a1a1a' }};"
-        class="w-full px-6 text-center mt-[-15px] z-10 flex flex-col items-center flex-shrink-0"
+        class="w-full px-6 {{ $coverUrl ? 'mt-[-15px]' : 'pt-28' }} z-10 flex flex-col items-center flex-shrink-0 text-center"
       >
         <h1 class="text-3xl font-serif tracking-wide font-normal">
           {{ $profile?->display_name ?? $user->name }}

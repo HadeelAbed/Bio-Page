@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\Route;
  |    (A marketing homepage can replace this later without touching the
  |    wildcard below, because it is a two-segment-safe exact path.)
  * ======================================================================== */
-Route::get('/', fn () => redirect()->route('login'))->name('home');
+Route::get('/', fn () => view('welcome'))->name('home');
 
 /* ===========================================================================
  | 1. GUEST-ONLY AUTH (/login, /register)
@@ -37,10 +37,14 @@ Route::get('/', fn () => redirect()->route('login'))->name('home');
  * ======================================================================== */
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
-    Route::post('/login', [AuthController::class, 'store'])->name('login.store');
+    Route::post('/login', [AuthController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('login.store');
 
     Route::get('/register', [AuthController::class, 'createRegister'])->name('register');
-    Route::post('/register', [AuthController::class, 'storeRegister'])->name('register.store');
+    Route::post('/register', [AuthController::class, 'storeRegister'])
+        ->middleware('throttle:6,1')
+        ->name('register.store');
 });
 
 /* ===========================================================================
@@ -61,13 +65,12 @@ Route::middleware('auth')->group(function () {
 /* ===========================================================================
  | 3. PUBLIC DYNAMIC BIO PAGE — keep at the BOTTOM of the file.
  |    Regex breakdown of the constraint:
- |      (?!dashboard|login|register|logout)  negative lookahead: the username
- |                                            may NOT start with a reserved
- |                                            system slug
- |      [a-zA-Z0-9_\-]+                       then one or more URL-safe chars
+ |      (?!(?:dashboard|login|register|logout)$) excludes exact reserved
+ |                                                slugs without blocking valid
+ |                                                usernames like dashboard2
+ |      [a-zA-Z0-9_-]+                            then URL-safe characters
  |      $                                      entire segment, nothing after
  * ======================================================================== */
 Route::get('/{username}', [BioController::class, 'show'])
-    ->where('username', '^(?!dashboard|login|register|logout)[a-zA-Z0-9_\-]+$')
+    ->where('username', '^(?!(?:dashboard|login|register|logout)$)[a-zA-Z0-9_-]+$')
     ->name('bio.show');
-

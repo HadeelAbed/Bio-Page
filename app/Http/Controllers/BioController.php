@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * ---------------------------------------------------------------------------
@@ -34,6 +35,8 @@ class BioController extends Controller
      */
     public function show(Request $request, string $username): View
     {
+        $username = Str::lower($username);
+
         // N+1 prevention: with() loads profile + links in two extra queries,
         // not one query per rendered link. The query-level orderBy('order')
         // relies on the composite index (user_id, order) from Phase 1.

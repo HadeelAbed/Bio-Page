@@ -33,7 +33,7 @@ class DatabaseSeeder extends Seeder
         $user->profile()->create([
             'display_name' => 'هديل أبو صفية',
             'bio' => 'Software Engineer & Graphic Designer',
-            'header_image' => null, // accessor falls back to the stock cover
+            'header_image' => null, // Cover images are optional.
             'bg_color_1' => '#b88c8f',
             'bg_color_2' => '#ba8b8f',
             'text_color' => '#1a1a1a',
@@ -46,7 +46,6 @@ class DatabaseSeeder extends Seeder
             ['title' => 'معرض أعمالي على بيهانس', 'url' => 'https://behance.net'],
             ['title' => 'حسابي على GitHub ومشاريعي البرمجية', 'url' => 'https://github.com'],
             ['title' => 'ملفي الشخصي على LinkedIn', 'url' => 'https://linkedin.com'],
-            ['title' => 'تواصل معي عبر واتساب', 'url' => '#'],
         ];
 
         foreach ($links as $index => $link) {

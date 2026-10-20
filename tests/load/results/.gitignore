@@ -1,0 +1,3 @@
+# Load-test result artifacts are machine-specific — keep them local.
+*
+!.gitignore
