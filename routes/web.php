@@ -18,6 +18,8 @@
  * ---------------------------------------------------------------------------
  */
 
+use App\Http\Controllers\Auth\NewPasswordController;
+use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BioController;
 use App\Http\Controllers\DashboardController;
@@ -45,6 +47,21 @@ Route::middleware('guest')->group(function () {
     Route::post('/register', [AuthController::class, 'storeRegister'])
         ->middleware('throttle:6,1')
         ->name('register.store');
+
+    // Password reset: request a link, then consume the token from the email.
+    Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])
+        ->name('password.request');
+    Route::post('/forgot-password', [PasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('password.email');
+
+    Route::get('/reset-password/{token}', [NewPasswordController::class, 'create'])
+        ->name('password.reset');
+    // A token-less visit has nothing to reset: send the user to request a link.
+    Route::get('/reset-password', fn () => redirect()->route('password.request'));
+    Route::post('/reset-password', [NewPasswordController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('password.store');
 });
 
 /* ===========================================================================
@@ -64,13 +81,14 @@ Route::middleware('auth')->group(function () {
 
 /* ===========================================================================
  | 3. PUBLIC DYNAMIC BIO PAGE — keep at the BOTTOM of the file.
- |    Regex breakdown of the constraint:
- |      (?!(?:dashboard|login|register|logout)$) excludes exact reserved
- |                                                slugs without blocking valid
- |                                                usernames like dashboard2
- |      [a-zA-Z0-9_-]+                            then URL-safe characters
- |      $                                      entire segment, nothing after
- * ======================================================================== */
+  |    Regex breakdown of the constraint:
+  |      (?!(?:dashboard|login|register|logout|forgot-password|reset-password)$)
+  |                                                excludes exact reserved
+  |                                                slugs without blocking valid
+  |                                                usernames like dashboard2
+  |      [a-zA-Z0-9_-]+                            then URL-safe characters
+  |      $                                      entire segment, nothing after
+  * ======================================================================== */
 Route::get('/{username}', [BioController::class, 'show'])
-    ->where('username', '^(?!(?:dashboard|login|register|logout)$)[a-zA-Z0-9_-]+$')
+    ->where('username', '^(?!(?:dashboard|login|register|logout|forgot-password|reset-password)$)[a-zA-Z0-9_-]+$')
     ->name('bio.show');

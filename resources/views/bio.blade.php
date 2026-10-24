@@ -24,18 +24,15 @@
          (?-> nullsafe: a brand-new account may have no profile row yet) --}}
     <title>{{ $profile?->display_name ?? $user->name }} | {{ '@' . $user->username }}</title>
 
-    {{-- Tailwind (CDN build for a zero-build-step Blade stack; swap for the
-         Vite + @tailwindcss/vite pipeline when moving to production) --}}
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    {{-- Tailwind + vendor assets are served locally (no third-party CDN) --}}
+    <script src="{{ asset('js/tailwind-3.4.17.js') }}"></script>
+    <link href="{{ asset('vendor/fontawesome/css/all.min.css') }}" rel="stylesheet" />
 
-    {{-- Typography: Tajawal for Arabic, Plus Jakarta Sans as Latin fallback --}}
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet" />
+    {{-- Typography: self-hosted Tajawal + Plus Jakarta Sans --}}
+    <link href="{{ asset('css/fonts.css') }}" rel="stylesheet" />
 
     {{-- Alpine.js: powers the share/clipboard button on this page --}}
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="{{ asset('js/alpine.min.js') }}"></script>
 
     <style>
       body { font-family: "Tajawal", "Plus Jakarta Sans", sans-serif; }

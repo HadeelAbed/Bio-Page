@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Notifications\ResetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -99,5 +100,13 @@ class User extends Authenticatable
         return Attribute::make(
             set: fn (string $value): string => Str::lower(trim($value)),
         );
+    }
+
+    /**
+     * Send the Arabic password-reset email instead of the framework default.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
     }
 }

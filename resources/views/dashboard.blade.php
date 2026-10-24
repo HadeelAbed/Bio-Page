@@ -24,15 +24,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>محرر الصفحة والروابط | {{ '@' . auth()->user()->username }}</title>
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet" />
+    <script src="{{ asset('js/tailwind-3.4.17.js') }}"></script>
+    <script defer src="{{ asset('js/alpine.min.js') }}"></script>
+    <link href="{{ asset('vendor/fontawesome/css/all.min.css') }}" rel="stylesheet" />
+    <link href="{{ asset('css/fonts.css') }}" rel="stylesheet" />
 
     <style>
       body { font-family: "Tajawal", "Plus Jakarta Sans", sans-serif; }
+      [x-cloak] { display: none !important; }
 
       /* Same gradient-masking as the public page — the preview must be
          pixel-faithful or it stops being trustworthy. */
@@ -75,8 +74,15 @@
         name: @js(old('display_name', $profile->display_name ?? '')),
         bio: @js(old('bio', $profile->bio ?? '')),
 
-        /* Use the default illustration until the user uploads a cover. */
-        headerImg: @js($profile->header_image_url ?? asset('images/hijab-portrait.svg')),
+        /* Cover preview: empty when no cover is uploaded. The editor shows the
+           chosen gradient only — no stock placeholder image. */
+        headerImg: @js($profile->header_image_url),
+
+        /* Cover payload for the server (data URL). Kept in a hidden field so
+           the form submits urlencoded — multipart is blocked by the host WAF. */
+        headerImageBase64: '',
+        headerImageBusy: false,
+        headerError: '',
 
         /* Set when the user explicitly clears an existing cover. */
         removeHeaderImage: false,
@@ -107,14 +113,49 @@
             this.textColor = preset.text;
         },
 
-        /* Instant client-side preview of the chosen file (blob URL — no
-           base64 bloat; the browser reclaims it on page unload) */
+        /* Read the chosen file into a data URL. The <input> has no name, so the
+           browser never builds a multipart body; the data URL is POSTed as a
+           normal urlencoded field and decoded server-side. */
         previewImage(event) {
-            const file = event.target.files[0];
-            if (file) {
-                this.headerImg = URL.createObjectURL(file);
-                this.removeHeaderImage = false;
+            const input = event.target;
+            const file = input.files && input.files[0];
+
+            if (!file) return;
+
+            this.headerError = '';
+            this.removeHeaderImage = false;
+
+            if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+                this.headerError = 'صيغة الصورة المسموحة: JPG أو PNG أو WEBP فقط.';
+                input.value = '';
+                this.headerImageBase64 = '';
+                return;
             }
+
+            if (file.size > 2 * 1024 * 1024) {
+                this.headerError = 'حجم الصورة لا يتجاوز 2 ميغابايت.';
+                input.value = '';
+                this.headerImageBase64 = '';
+                return;
+            }
+
+            this.headerImageBusy = true;
+
+            const reader = new FileReader();
+
+            reader.onload = () => {
+                this.headerImg = reader.result;
+                this.headerImageBase64 = reader.result;
+                this.headerImageBusy = false;
+            };
+
+            reader.onerror = () => {
+                this.headerImageBusy = false;
+                this.headerError = 'تعذر قراءة الصورة، حاولي مرة أخرى.';
+                this.headerImageBase64 = '';
+            };
+
+            reader.readAsDataURL(file);
         },
 
         /* Optional cover: clear the current image and flag it for deletion
@@ -122,6 +163,8 @@
            re-upload the old selection. */
         removeHeader() {
             this.headerImg = null;
+            this.headerImageBase64 = '';
+            this.headerError = '';
             this.removeHeaderImage = true;
             if (this.$refs.headerImageInput) this.$refs.headerImageInput.value = '';
         },
@@ -183,7 +226,6 @@
         <form
           method="POST"
           action="{{ route('dashboard.update') }}"
-          enctype="multipart/form-data"
           class="mb-8 pb-4 border-b border-gray-100"
         >
           @csrf
@@ -212,9 +254,12 @@
               </a>
               <button
                 type="submit"
+                :disabled="headerImageBusy"
+                :class="headerImageBusy ? 'opacity-60 cursor-wait' : ''"
                 class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-sm transition"
               >
-                حفظ ونشر الرابط
+                <span x-show="!headerImageBusy">حفظ ونشر الرابط</span>
+                <span x-show="headerImageBusy" x-cloak>جارٍ تجهيز الصورة…</span>
               </button>
             </div>
           </div>
@@ -247,11 +292,12 @@
                   <label class="cursor-pointer inline-flex items-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-300 text-gray-700 text-xs font-semibold px-4 py-2.5 rounded-xl transition">
                     <i class="fa-solid fa-cloud-arrow-up text-sm"></i>
                     <span>اختيار صورة من جهازك</span>
-                    {{-- name= activates the REAL upload; the server validates
-                         mimes + 2 MB cap (see UpdateProfileRequest). --}}
+                    {{-- No name= on purpose: the file must NOT be submitted as
+                         multipart (the production host's WAF answers multipart
+                         POSTs with 403). JS reads it and fills the hidden
+                         base64 field below; the form stays urlencoded. --}}
                     <input
                       type="file"
-                      name="header_image"
                       x-ref="headerImageInput"
                       @change="previewImage($event)"
                       accept="image/jpeg,image/png,image/webp"
@@ -270,6 +316,9 @@
                 </div>
                 {{-- Deletion flag consumed by DashboardController::update() --}}
                 <input type="hidden" name="remove_header_image" :value="removeHeaderImage ? 1 : 0" />
+                {{-- The cover travels as a data URL inside this urlencoded field. --}}
+                <input type="hidden" name="header_image_base64" x-model="headerImageBase64" />
+                <p x-show="headerError" x-cloak x-text="headerError" class="text-[11px] text-red-600 mt-1.5"></p>
                 <p class="text-[11px] text-gray-400 mt-1.5">اختياري — اتركيه فارغًا إن لم ترغبي بإضافة صورة. JPG / PNG / WEBP بحد أقصى 2MB.</p>
               </div>
             </div>

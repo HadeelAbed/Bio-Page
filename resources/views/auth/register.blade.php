@@ -10,8 +10,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>إنشاء حساب | Bio Page</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet" />
+    <script src="{{ asset('js/tailwind-3.4.17.js') }}"></script>
+    <link href="{{ asset('css/fonts.css') }}" rel="stylesheet" />
     <style> body { font-family: "Tajawal", sans-serif; } </style>
   </head>
   <body class="min-h-screen bg-gradient-to-b from-[#b88c8f] via-[#c99a9e] to-[#ba8b8f] flex items-center justify-center p-6">

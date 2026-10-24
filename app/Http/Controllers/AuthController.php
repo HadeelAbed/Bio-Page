@@ -105,7 +105,7 @@ class AuthController extends Controller
                 // bio page for a user named "login". The lookahead in the
                 // Phase 4 route constraint blocks them at the router; this
                 // Rule::notIn() blocks them at REGISTRATION, closing the loop.
-                Rule::notIn(['dashboard', 'login', 'register', 'logout']),
+                Rule::notIn(['dashboard', 'login', 'register', 'logout', 'forgot-password', 'reset-password']),
                 // Case-insensitive uniqueness is ALSO guaranteed by the DB
                 // index (utf8mb4_unicode_ci); this check just short-circuits
                 // with a friendly message before we hit the database.

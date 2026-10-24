@@ -141,7 +141,7 @@ class BioPlatformTest extends TestCase
         );
     }
 
-    public function test_dashboard_preview_uses_default_hijab_illustration_without_uploaded_cover(): void
+    public function test_dashboard_preview_shows_no_stock_illustration_without_uploaded_cover(): void
     {
         $user = User::factory()->create([
             'username' => 'dashboard-preview',
@@ -151,7 +151,7 @@ class BioPlatformTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard.edit'))
             ->assertOk()
-            ->assertSee('hijab-portrait.svg');
+            ->assertDontSee('hijab-portrait.svg');
     }
 
     public function test_dashboard_shows_manual_hex_inputs_and_outer_page_background_control(): void
@@ -221,6 +221,37 @@ class BioPlatformTest extends TestCase
         ])->assertRedirect(route('dashboard.edit'));
 
         $this->assertNull($user->profile->fresh()->header_image);
+    }
+
+    public function test_saving_profile_without_replacing_header_image_preserves_it_after_reload(): void
+    {
+        Storage::fake('public');
+
+        $user = $this->makeUser('cover-preserve');
+        Storage::disk('public')->put('headers/old.jpg', 'existing-image');
+        $user->profile->update(['header_image' => 'headers/old.jpg']);
+
+        $this->actingAs($user)->put(route('dashboard.update'), [
+            'display_name' => 'Hadeel Demo',
+            'bio' => 'Keep my cover',
+            'bg_color_1' => '#b88c8f',
+            'bg_color_2' => '#ba8b8f',
+            'text_color' => '#1a1a1a',
+            'page_background_color' => '#f4efed',
+            'remove_header_image' => '0',
+            'links' => [],
+        ])->assertRedirect(route('dashboard.edit'));
+
+        $this->assertSame('headers/old.jpg', $user->profile->fresh()->header_image);
+        Storage::disk('public')->assertExists('headers/old.jpg');
+
+        $this->get(route('dashboard.edit'))
+            ->assertOk()
+            ->assertSee('old.jpg');
+
+        $this->get(route('bio.show', 'cover-preserve'))
+            ->assertOk()
+            ->assertSee('old.jpg');
     }
 
     public function test_remove_header_image_flag_clears_an_existing_cover(): void
@@ -306,6 +337,75 @@ class BioPlatformTest extends TestCase
         $this->assertNotSame('headers/old.jpg', $newPath);
         Storage::disk('public')->assertMissing('headers/old.jpg');
         Storage::disk('public')->assertExists($newPath);
+    }
+
+    public function test_saving_profile_without_a_new_cover_keeps_the_existing_image(): void
+    {
+        Storage::fake('public');
+
+        $user = $this->makeUser('cover-keep');
+        Storage::disk('public')->put('headers/current.jpg', 'current-image');
+        $user->profile->update(['header_image' => 'headers/current.jpg']);
+
+        $this->actingAs($user)->put(route('dashboard.update'), [
+            'display_name' => 'Keep Cover',
+            'bio' => 'No new cover this time',
+            'bg_color_1' => '#b88c8f',
+            'bg_color_2' => '#ba8b8f',
+            'text_color' => '#1a1a1a',
+            'page_background_color' => '#f4efed',
+            'links' => [],
+        ])->assertRedirect(route('dashboard.edit'));
+
+        $this->assertSame('headers/current.jpg', $user->profile->fresh()->header_image);
+        Storage::disk('public')->assertExists('headers/current.jpg');
+    }
+
+    public function test_cover_can_be_uploaded_as_base64_over_a_urlencoded_request(): void
+    {
+        Storage::fake('public');
+
+        $user = $this->makeUser('cover-base64');
+        $bytes = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+
+        $this->actingAs($user)->put(route('dashboard.update'), [
+            'display_name' => 'Base64 Cover',
+            'bio' => 'No multipart involved',
+            'bg_color_1' => '#b88c8f',
+            'bg_color_2' => '#ba8b8f',
+            'text_color' => '#1a1a1a',
+            'page_background_color' => '#f4efed',
+            'header_image_base64' => 'data:image/png;base64,'.base64_encode($bytes),
+            'links' => [],
+        ])->assertRedirect(route('dashboard.edit'));
+
+        $path = $user->profile->fresh()->header_image;
+
+        $this->assertNotNull($path);
+        $this->assertStringStartsWith('headers/', $path);
+        $this->assertStringEndsWith('.png', $path);
+        Storage::disk('public')->assertExists($path);
+        $this->assertSame($bytes, Storage::disk('public')->get($path));
+    }
+
+    public function test_base64_cover_validation_rejects_payloads_that_are_not_images(): void
+    {
+        Storage::fake('public');
+
+        $user = $this->makeUser('cover-base64-invalid');
+
+        $this->actingAs($user)->put(route('dashboard.update'), [
+            'display_name' => 'Bad Base64',
+            'bio' => 'Not an image',
+            'bg_color_1' => '#b88c8f',
+            'bg_color_2' => '#ba8b8f',
+            'text_color' => '#1a1a1a',
+            'page_background_color' => '#f4efed',
+            'header_image_base64' => 'data:image/png;base64,'.base64_encode('definitely not a png'),
+            'links' => [],
+        ])->assertSessionHasErrors('header_image_base64');
+
+        $this->assertNull($user->profile->fresh()->header_image);
     }
 
     public function test_failed_profile_update_preserves_old_image_and_removes_new_upload(): void

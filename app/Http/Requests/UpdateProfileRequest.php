@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Base64Image;
+use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -58,6 +60,33 @@ class UpdateProfileRequest extends FormRequest
             // `dimensions` is deliberately omitted to allow any aspect ratio; the
             // CSS (object-cover + object-top) handles cropping responsively.
             'header_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+
+            // The dashboard submits the cover as a base64 data URL inside a
+            // urlencoded body. Multipart is unusable on the production host
+            // (its edge proxy answers every multipart POST with 403), so this
+            // is the supported upload channel. Decoding twice (here and in the
+            // controller) is cheap and keeps the validation message precise.
+            'header_image_base64' => [
+                'nullable',
+                'string',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+
+                    $image = Base64Image::decode(is_string($value) ? $value : null);
+
+                    if ($image === null) {
+                        $fail('الملف المرفوع يجب أن يكون صورة صالحة (JPG أو PNG أو WEBP).');
+
+                        return;
+                    }
+
+                    if (strlen($image['bytes']) > Base64Image::MAX_BYTES) {
+                        $fail('حجم الصورة لا يتجاوز 2 ميغابايت.');
+                    }
+                },
+            ],
 
             // Explicit "remove the existing cover" flag. The cover is optional,
             // so clearing it must be possible without uploading a replacement.

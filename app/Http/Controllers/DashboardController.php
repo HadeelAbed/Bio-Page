@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateProfileRequest;
 use App\Models\User;
+use App\Support\Base64Image;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -80,9 +82,10 @@ class DashboardController extends Controller
         $data = $request->validated();
         $newHeaderPath = null;
         $oldHeaderPath = null;
+        $shouldDeleteOldHeader = false;
 
         try {
-            DB::transaction(function () use ($user, $data, $request, &$newHeaderPath, &$oldHeaderPath) {
+            DB::transaction(function () use ($user, $data, $request, &$newHeaderPath, &$oldHeaderPath, &$shouldDeleteOldHeader) {
                 /* ---------------------------- 1. PROFILE ------------------------- */
                 $profile = $user->profile ?? $user->profile()->make();
                 $oldHeaderPath = $profile->header_image;
@@ -98,11 +101,32 @@ class DashboardController extends Controller
                     $newHeaderPath = $newPath;
 
                     $profile->header_image = $newPath; // relative path, see accessor
+                } elseif (is_string($request->input('header_image_base64')) && $request->input('header_image_base64') !== '') {
+                    // Multipart uploads are rejected by the production host's edge
+                    // proxy (raw 403), so the dashboard ships the cover as a
+                    // base64 data URL inside the normal urlencoded POST instead.
+                    $image = Base64Image::decode($request->input('header_image_base64'));
+
+                    abort_if($image === null, 422, 'صورة الهيدر غير صالحة.');
+                    abort_if(strlen($image['bytes']) > Base64Image::MAX_BYTES, 422, 'حجم صورة الهيدر يتجاوز 2 ميغابايت.');
+
+                    $newPath = 'headers/'.Str::uuid().'.'.$image['ext'];
+
+                    abort_unless(
+                        Storage::disk('public')->put($newPath, $image['bytes']) !== false,
+                        500,
+                        'تعذر حفظ صورة الهيدر.'
+                    );
+
+                    $newHeaderPath = $newPath;
+                    $profile->header_image = $newPath;
                 } elseif ($request->boolean('remove_header_image')) {
                     // Cover is OPTIONAL: no replacement file + explicit removal flag
                     // ⇒ clear the column; the old file is deleted after commit.
                     $profile->header_image = null;
                 }
+
+                $shouldDeleteOldHeader = $oldHeaderPath !== $profile->header_image;
 
                 $profile->fill(collect($data)->only([
                     'display_name', 'bio', 'bg_color_1', 'bg_color_2', 'text_color',
@@ -127,7 +151,7 @@ class DashboardController extends Controller
             throw $exception;
         }
 
-        if ($oldHeaderPath && $oldHeaderPath !== $newHeaderPath
+        if ($shouldDeleteOldHeader && $oldHeaderPath
             && Storage::disk('public')->exists($oldHeaderPath)
             && ! Storage::disk('public')->delete($oldHeaderPath)) {
             throw new \RuntimeException('The profile was saved, but the previous image could not be removed.');
